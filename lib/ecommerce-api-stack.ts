@@ -81,6 +81,11 @@ export class EcommerceApiStack extends cdk.Stack {
       restApiName: 'Ecommerce Service V2',
       description: 'API para gestionar Usuarios y Productos.',
       cloudWatchRole: true,
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
       deployOptions: {
         stageName: 'prod',
         metricsEnabled: true,

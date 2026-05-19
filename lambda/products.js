@@ -11,7 +11,10 @@ const tableName = process.env.TABLE_NAME;
 
 const jsonResponse = (statusCode, body) => ({
 	statusCode,
-	headers: { "Content-Type": "application/json" },
+	headers: {
+		"Content-Type": "application/json",
+		"Access-Control-Allow-Origin": "*",
+	},
 	body: JSON.stringify(body),
 });
 
