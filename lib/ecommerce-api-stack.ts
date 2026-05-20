@@ -69,6 +69,7 @@ export class EcommerceApiStack extends cdk.Stack {
 
     // Otorga permisos a las Lambdas para leer/escribir en sus tablas
     usersTable.grantReadWriteData(userLambda);
+    productsTable.grantReadData(userLambda);
     productsTable.grantReadWriteData(productLambda);
     ordersTable.grantReadWriteData(userLambda);
 
