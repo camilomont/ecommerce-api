@@ -4,6 +4,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 
 export class EcommerceApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -38,6 +39,28 @@ export class EcommerceApiStack extends cdk.Stack {
       tableName: 'Orders',
     });
 
+    const productImagesBucket = new s3.Bucket(this, 'ProductImagesBucket', {
+      versioned: false,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      publicReadAccess: true,
+      blockPublicAccess: new s3.BlockPublicAccess({
+        blockPublicAcls: false,
+        blockPublicPolicy: false,
+        ignorePublicAcls: false,
+        restrictPublicBuckets: false,
+      }),
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          exposedHeaders: ['ETag'],
+        },
+      ],
+    });
+
     // 2. FUNCIONES LAMBDA
     const userLambda = new lambda.Function(this, 'UserHandler', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -64,7 +87,10 @@ export class EcommerceApiStack extends cdk.Stack {
       memorySize: 256,
       tracing: lambda.Tracing.ACTIVE,
       logRetention: logs.RetentionDays.ONE_MONTH,
-      environment: { TABLE_NAME: productsTable.tableName },
+      environment: {
+        TABLE_NAME: productsTable.tableName,
+        BUCKET_NAME: productImagesBucket.bucketName,
+      },
     });
 
     // Otorga permisos a las Lambdas para leer/escribir en sus tablas
@@ -72,6 +98,7 @@ export class EcommerceApiStack extends cdk.Stack {
     productsTable.grantReadData(userLambda);
     productsTable.grantReadWriteData(productLambda);
     ordersTable.grantReadWriteData(userLambda);
+    productImagesBucket.grantWrite(productLambda);
 
     // 3. API GATEWAY
     const apiAccessLogs = new logs.LogGroup(this, 'ApiAccessLogs', {
@@ -83,6 +110,7 @@ export class EcommerceApiStack extends cdk.Stack {
       restApiName: 'Ecommerce Service V2',
       description: 'API para gestionar Usuarios y Productos.',
       cloudWatchRole: true,
+      binaryMediaTypes: ['multipart/form-data'],
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -114,20 +142,22 @@ export class EcommerceApiStack extends cdk.Stack {
     const userIntegration = new apigateway.LambdaIntegration(userLambda);
     const productIntegration = new apigateway.LambdaIntegration(productLambda);
 
-    // Recurso /products (GET y POST)
+    // Recurso /products
     const productsResource = api.root.addResource('products');
     productsResource.addMethod('GET', productIntegration);
     productsResource.addMethod('POST', productIntegration);
+    const productsUploadUrlResource = productsResource.addResource('upload-url');
+    productsUploadUrlResource.addMethod('POST', productIntegration);
     const singleProductResource = productsResource.addResource('{productId}');
     singleProductResource.addMethod('PUT', productIntegration);
     singleProductResource.addMethod('DELETE', productIntegration);
 
-    // Recurso /users (GET y POST)
+    // Recurso /users
     const usersResource = api.root.addResource('users');
     usersResource.addMethod('GET', userIntegration);
     usersResource.addMethod('POST', userIntegration);
 
-    // Recurso /users/{userId}/products (GET y POST)
+    // Recurso /users/{userId}/products
     const singleUserResource = usersResource.addResource('{userId}');
     singleUserResource.addMethod('PUT', userIntegration);
     singleUserResource.addMethod('DELETE', userIntegration);
