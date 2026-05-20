@@ -50,6 +50,7 @@ export class EcommerceApiStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_MONTH,
       environment: {
         TABLE_NAME: usersTable.tableName,
+        PRODUCTS_TABLE_NAME: productsTable.tableName,
         ORDERS_TABLE_NAME: ordersTable.tableName,
       },
     });

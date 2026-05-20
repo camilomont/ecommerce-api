@@ -1,6 +1,7 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
 	DynamoDBDocumentClient,
+	GetCommand,
 	PutCommand,
 	ScanCommand,
 	QueryCommand,
@@ -9,6 +10,7 @@ const {
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 const USERS_TABLE = process.env.TABLE_NAME;
+const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE_NAME;
 const ORDERS_TABLE = process.env.ORDERS_TABLE_NAME;
 
 const jsonResponse = (statusCode, body) => ({
@@ -54,6 +56,28 @@ exports.handler = async (event) => {
 				const body = parsed.value;
 				if (typeof body.productId !== "string" || body.productId.trim() === "") {
 					return jsonResponse(400, { error: "productId es requerido" });
+				}
+
+				const userExists = await docClient.send(
+					new GetCommand({
+						TableName: USERS_TABLE,
+						Key: { userId },
+					})
+				);
+
+				if (!userExists.Item) {
+					return jsonResponse(404, { error: "El usuario no existe" });
+				}
+
+				const productExists = await docClient.send(
+					new GetCommand({
+						TableName: PRODUCTS_TABLE,
+						Key: { productId: body.productId },
+					})
+				);
+
+				if (!productExists.Item) {
+					return jsonResponse(404, { error: "El producto no existe" });
 				}
 
 				if (
