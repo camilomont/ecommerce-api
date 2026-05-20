@@ -3,6 +3,8 @@ const {
 	DynamoDBDocumentClient,
 	GetCommand,
 	PutCommand,
+	UpdateCommand,
+	DeleteCommand,
 	ScanCommand,
 	QueryCommand,
 } = require("@aws-sdk/lib-dynamodb");
@@ -40,7 +42,7 @@ exports.handler = async (event) => {
 	const query = event.queryStringParameters || {};
 
 	try {
-		if (resource.includes("/products")) {
+		if (resource === "/users/{userId}/products") {
 			const userId = pathParameters.userId;
 
 			if (!userId) {
@@ -113,6 +115,81 @@ exports.handler = async (event) => {
 					items: data.Items || [],
 					lastEvaluatedKey: data.LastEvaluatedKey || null,
 				});
+			}
+
+			return jsonResponse(405, { error: "Metodo no permitido" });
+		}
+
+		if (resource === "/users/{userId}") {
+			const userId = pathParameters.userId;
+
+			if (!userId) {
+				return jsonResponse(400, { error: "userId es requerido" });
+			}
+
+			if (method === "PUT") {
+				const parsed = parseBody(event.body);
+				if (parsed.error) {
+					return jsonResponse(400, { error: parsed.error });
+				}
+
+				const body = parsed.value;
+				if (typeof body.name !== "string" || body.name.trim() === "") {
+					return jsonResponse(400, { error: "name es requerido" });
+				}
+
+				if (!isEmail(body.email)) {
+					return jsonResponse(400, { error: "email invalido" });
+				}
+
+				const userExists = await docClient.send(
+					new GetCommand({
+						TableName: USERS_TABLE,
+						Key: { userId },
+					})
+				);
+
+				if (!userExists.Item) {
+					return jsonResponse(404, { error: "El usuario no existe" });
+				}
+
+				await docClient.send(
+					new UpdateCommand({
+						TableName: USERS_TABLE,
+						Key: { userId },
+						UpdateExpression: "SET #name = :name, email = :email",
+						ExpressionAttributeNames: { "#name": "name" },
+						ExpressionAttributeValues: {
+							":name": body.name,
+							":email": body.email,
+						},
+						ReturnValues: "ALL_NEW",
+					})
+				);
+
+				return jsonResponse(200, { message: "Usuario actualizado con exito" });
+			}
+
+			if (method === "DELETE") {
+				const userExists = await docClient.send(
+					new GetCommand({
+						TableName: USERS_TABLE,
+						Key: { userId },
+					})
+				);
+
+				if (!userExists.Item) {
+					return jsonResponse(404, { error: "El usuario no existe" });
+				}
+
+				await docClient.send(
+					new DeleteCommand({
+						TableName: USERS_TABLE,
+						Key: { userId },
+					})
+				);
+
+				return jsonResponse(200, { message: "Usuario eliminado con exito" });
 			}
 
 			return jsonResponse(405, { error: "Metodo no permitido" });

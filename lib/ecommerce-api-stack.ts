@@ -85,7 +85,7 @@ export class EcommerceApiStack extends cdk.Stack {
       cloudWatchRole: true,
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'POST', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
       deployOptions: {
@@ -118,6 +118,9 @@ export class EcommerceApiStack extends cdk.Stack {
     const productsResource = api.root.addResource('products');
     productsResource.addMethod('GET', productIntegration);
     productsResource.addMethod('POST', productIntegration);
+    const singleProductResource = productsResource.addResource('{productId}');
+    singleProductResource.addMethod('PUT', productIntegration);
+    singleProductResource.addMethod('DELETE', productIntegration);
 
     // Recurso /users (GET y POST)
     const usersResource = api.root.addResource('users');
@@ -126,6 +129,8 @@ export class EcommerceApiStack extends cdk.Stack {
 
     // Recurso /users/{userId}/products (GET y POST)
     const singleUserResource = usersResource.addResource('{userId}');
+    singleUserResource.addMethod('PUT', userIntegration);
+    singleUserResource.addMethod('DELETE', userIntegration);
     const userProductsResource = singleUserResource.addResource('products');
     userProductsResource.addMethod('POST', userIntegration);
     userProductsResource.addMethod('GET', userIntegration);
