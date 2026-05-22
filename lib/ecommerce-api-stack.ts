@@ -39,7 +39,38 @@ export class EcommerceApiStack extends cdk.Stack {
       tableName: 'Orders',
     });
 
+    const projectsTable = new dynamodb.Table(this, 'CloudShareProjectsTable', {
+      partitionKey: { name: 'projectId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      pointInTimeRecovery: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      tableName: 'CloudShareProjects',
+    });
+
     const productImagesBucket = new s3.Bucket(this, 'ProductImagesBucket', {
+      versioned: false,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      publicReadAccess: true,
+      blockPublicAccess: new s3.BlockPublicAccess({
+        blockPublicAcls: false,
+        blockPublicPolicy: false,
+        ignorePublicAcls: false,
+        restrictPublicBuckets: false,
+      }),
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          exposedHeaders: ['ETag'],
+        },
+      ],
+    });
+
+    const projectCoversBucket = new s3.Bucket(this, 'ProjectCoversBucket', {
       versioned: false,
       encryption: s3.BucketEncryption.S3_MANAGED,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -93,12 +124,30 @@ export class EcommerceApiStack extends cdk.Stack {
       },
     });
 
+    const projectsLambda = new lambda.Function(this, 'ProjectsHandler', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'projects.handler',
+      code: lambda.Code.fromAsset('lambda'),
+      architecture: lambda.Architecture.ARM_64,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 256,
+      tracing: lambda.Tracing.ACTIVE,
+      logRetention: logs.RetentionDays.ONE_MONTH,
+      environment: {
+        TABLE_NAME: projectsTable.tableName,
+        BUCKET_NAME: projectCoversBucket.bucketName,
+      },
+    });
+
     // Otorga permisos a las Lambdas para leer/escribir en sus tablas
     usersTable.grantReadWriteData(userLambda);
     productsTable.grantReadData(userLambda);
     productsTable.grantReadWriteData(productLambda);
     ordersTable.grantReadWriteData(userLambda);
     productImagesBucket.grantWrite(productLambda);
+
+    projectsTable.grantReadWriteData(projectsLambda);
+    projectCoversBucket.grantWrite(projectsLambda);
 
     // 3. API GATEWAY
     const apiAccessLogs = new logs.LogGroup(this, 'ApiAccessLogs', {
@@ -141,6 +190,7 @@ export class EcommerceApiStack extends cdk.Stack {
 
     const userIntegration = new apigateway.LambdaIntegration(userLambda);
     const productIntegration = new apigateway.LambdaIntegration(productLambda);
+    const projectsIntegration = new apigateway.LambdaIntegration(projectsLambda);
 
     // Recurso /products
     const productsResource = api.root.addResource('products');
@@ -151,6 +201,11 @@ export class EcommerceApiStack extends cdk.Stack {
     const singleProductResource = productsResource.addResource('{productId}');
     singleProductResource.addMethod('PUT', productIntegration);
     singleProductResource.addMethod('DELETE', productIntegration);
+
+    // Recurso /projects (CloudShare)
+    const projectsResource = api.root.addResource('projects');
+    projectsResource.addMethod('GET', projectsIntegration);
+    projectsResource.addMethod('POST', projectsIntegration);
 
     // Recurso /users
     const usersResource = api.root.addResource('users');
